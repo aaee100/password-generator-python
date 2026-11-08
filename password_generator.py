@@ -1,3 +1,5 @@
+
+
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import secrets
@@ -8,125 +10,109 @@ def generate_passwords():
     try:
         length = int(length_var.get())
         count = int(count_var.get())
-        letter_case = letter_case_var.get()
-        num_capitals = int(capitals_var.get()) if letter_case == "mixed" else 0
+        mode = letter_case_var.get()
+        capitals = int(capitals_var.get()) if mode == "mixed" else 0
 
         if length <= 0 or count <= 0:
             raise ValueError("Length and count must be greater than zero.")
 
-        if letter_case == "mixed" and num_capitals < 0:
-            raise ValueError("Uppercase count cannot be negative.")
+        if mode == "mixed" and not 0 <= capitals <= length:
+            raise ValueError(
+                "Uppercase count must be between 0 and the password length."
+            )
 
-        # Collect selected symbols.
-        selected_symbols = [
-            symbol for symbol, var in symbol_vars.items()
-            if var.get()
+        symbols = [
+            symbol for symbol, var in symbol_vars.items() if var.get()
         ]
+        use_letters = include_letters_var.get()
+        use_numbers = include_numbers_var.get()
 
-        num_symbols = len(selected_symbols)
-
-        include_letters = include_letters_var.get()
-        include_numbers = include_numbers_var.get()
-
-        if not include_letters and not include_numbers and not selected_symbols:
+        if not use_letters and not use_numbers and not symbols:
             messagebox.showwarning(
                 "Selection Error",
                 "Please select at least one character type."
             )
             return
 
-        # Check whether the required characters fit in the password.
-        required_length = num_capitals + num_symbols
-
-        if required_length > length:
+        if mode == "mixed" and capitals > 0 and not use_letters:
             messagebox.showerror(
-                "Length Error",
-                "Too many required characters for the selected password length."
+                "Selection Error",
+                "Enable 'Include Letters' to add uppercase letters."
             )
             return
 
-        passwords = []
+        required = capitals + len(symbols)
+
+        if required > length:
+            messagebox.showerror(
+                "Length Error",
+                "The uppercase-letter and selected-symbol requirements "
+                "exceed the password length."
+            )
+            return
+
+        # Build the character pool.
+        pool = ""
+
+        if use_letters:
+            if mode == "lower":
+                pool += string.ascii_lowercase
+            elif mode == "upper":
+                pool += string.ascii_uppercase
+            else:
+                pool += string.ascii_lowercase
+
+        if use_numbers:
+            pool += string.digits
+
+        pool += "".join(symbols)
+
+        results = []
 
         for _ in range(count):
-            password_chars = []
+            chars = []
 
-            # Add required uppercase letters.
-            if letter_case == "mixed":
-                password_chars.extend(
+            # Add the required uppercase letters.
+            if mode == "mixed":
+                chars.extend(
                     secrets.choice(string.ascii_uppercase)
-                    for _ in range(num_capitals)
+                    for _ in range(capitals)
                 )
 
-            elif letter_case == "upper":
-                password_chars.extend(
-                    secrets.choice(string.ascii_uppercase)
-                    for _ in range(length)
-                )
+            # Include every selected symbol at least once.
+            chars.extend(symbols)
 
-            elif letter_case == "lower":
-                password_chars.extend(
-                    secrets.choice(string.ascii_lowercase)
-                    for _ in range(length)
-                )
+            # Fill the remaining positions.
+            remaining = length - len(chars)
 
-            # Add at least one of every selected symbol.
-            if selected_symbols:
-                password_chars.extend(selected_symbols)
-
-            # If the password is already full, no more characters are needed.
-            remaining_length = length - len(password_chars)
-
-            if remaining_length > 0:
-
-                # Build the pool of characters used to fill the password.
-                char_pool = ""
-
-                if include_letters:
-                    if letter_case == "lower":
-                        char_pool += string.ascii_lowercase
-
-                    elif letter_case == "upper":
-                        char_pool += string.ascii_uppercase
-
-                    elif letter_case == "mixed":
-                        char_pool += string.ascii_lowercase
-
-                if include_numbers:
-                    char_pool += string.digits
-
-                if selected_symbols:
-                    char_pool += "".join(selected_symbols)
-
-                if not char_pool:
+            if remaining > 0:
+                if not pool:
                     messagebox.showerror(
                         "Character Pool Error",
-                        "Character pool is empty. Check your selections."
+                        "No characters are available to fill the password."
                     )
                     return
 
-                # Fill the remaining password characters securely.
-                password_chars.extend(
-                    secrets.choice(char_pool)
-                    for _ in range(remaining_length)
+                chars.extend(
+                    secrets.choice(pool)
+                    for _ in range(remaining)
                 )
 
-            # Securely shuffle the characters.
-            secrets.SystemRandom().shuffle(password_chars)
+            # Shuffle the password characters.
+            secrets.SystemRandom().shuffle(chars)
 
-            password = "".join(password_chars)
-            passwords.append(password)
+            results.append("".join(chars))
 
-        # Display generated passwords.
+        # Display each password on a separate line.
         output_box.config(state="normal")
         output_box.delete("1.0", tk.END)
-        output_box.insert(tk.END, "\n".join(passwords))
+        output_box.insert(tk.END, "\n".join(results))
         output_box.config(state="disabled")
 
-    except ValueError:
+    except ValueError as error:
         messagebox.showerror(
             "Input Error",
-            "Please enter valid numbers for length, count, "
-            "and uppercase letters."
+            str(error) or "Please enter valid numbers."
         )
 
 
@@ -265,15 +251,14 @@ ttk.Label(
 symbol_frame = ttk.Frame(frame)
 symbol_frame.pack(fill="x")
 
-symbol_list = list("!@#$%^&*()_+-=[]{}|;:,.<>?")
-
 symbol_vars = {}
+
+symbol_list = list("!@#$%^&*()_+-=[]{}|;:,.<>?")
 
 columns = 6
 
 for index, symbol in enumerate(symbol_list):
     var = tk.BooleanVar()
-
     symbol_vars[symbol] = var
 
     checkbox = ttk.Checkbutton(
